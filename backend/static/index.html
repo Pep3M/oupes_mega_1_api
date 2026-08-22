@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Oupes</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #181b22;
+    --fg: #e8eaed;
+    --muted: #8b93a0;
+    --accent: #3ddc84;
+    --warn: #ffb020;
+    --in: #4fa3ff;
+    --out: #ff7676;
+    --border: #2a2f3a;
+  }
+  * { box-sizing: border-box; }
+  html, body { background: var(--bg); color: var(--fg); margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+  header { padding: 18px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+  header h1 { margin: 0; font-size: 20px; font-weight: 600; }
+  header .meta { color: var(--muted); font-size: 13px; }
+  header .status { margin-left: auto; padding: 4px 10px; border-radius: 12px; font-size: 12px; }
+  .status.connected { background: rgba(61,220,132,.15); color: var(--accent); }
+  .status.disconnected { background: rgba(255,118,118,.15); color: var(--out); }
+  main { padding: 24px; max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+  .panel h2 { margin: 0 0 16px; font-size: 14px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+  .battery { grid-column: span 2; display: flex; align-items: center; gap: 24px; }
+  .battery .pct { font-size: 64px; font-weight: 700; line-height: 1; }
+  .battery .bar-wrap { flex: 1; }
+  .battery .bar { height: 26px; background: #20242c; border-radius: 13px; overflow: hidden; position: relative; }
+  .battery .bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent), #6df3a3); transition: width .6s ease; }
+  .battery .sub { color: var(--muted); font-size: 13px; margin-top: 8px; display: flex; gap: 18px; flex-wrap: wrap; }
+  .flows { grid-column: span 2; }
+  .flows .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .flow-block .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
+  .flow-block .total { font-size: 28px; font-weight: 600; }
+  .flow-block.in .total { color: var(--in); }
+  .flow-block.out .total { color: var(--out); }
+  .channels { margin-top: 14px; display: grid; gap: 8px; }
+  .channel { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px; }
+  .channel .row { display: flex; align-items: center; gap: 10px; }
+  .channel .name { font-size: 13px; color: var(--muted); min-width: 90px; }
+  .channel .meter { flex: 1; height: 6px; background: #20242c; border-radius: 3px; overflow: hidden; }
+  .channel .meter-fill { height: 100%; transition: width .4s ease; }
+  .in .meter-fill { background: var(--in); }
+  .out .meter-fill { background: var(--out); }
+  .channel .val { font-variant-numeric: tabular-nums; font-size: 13px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  td { padding: 6px 0; color: var(--fg); border-bottom: 1px solid var(--border); }
+  td:first-child { color: var(--muted); }
+  td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 18px; }
+  .ok { color: var(--accent); }
+  .warn { color: var(--warn); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Oupes</h1>
+  <div class="meta" id="meta">connecting…</div>
+  <div class="status disconnected" id="conn">disconnected</div>
+</header>
+
+<main>
+  <section class="panel battery">
+    <div>
+      <div class="pct" id="batt-pct">--<span style="font-size:32px">%</span></div>
+    </div>
+    <div class="bar-wrap">
+      <div class="bar"><div class="bar-fill" id="batt-bar" style="width:0%"></div></div>
+      <div class="sub">
+        <span id="batt-time">remaining: -- min</span>
+        <span id="batt-temp">temp: --</span>
+        <span id="batt-fast">fast charge: --</span>
+        <span id="batt-switch">switch: --</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel flows">
+    <h2>Power Flows</h2>
+    <div class="grid">
+      <div class="flow-block in">
+        <div class="label">Input</div>
+        <div class="total" id="in-total">-- W</div>
+        <div class="channels">
+          <div class="channel"><div class="row"><span class="name">AC</span><span class="meter"><span class="meter-fill" id="in-ac-m"></span></span></div><span class="val" id="in-ac">-- W</span></div>
+          <div class="channel"><div class="row"><span class="name">PV (Solar)</span><span class="meter"><span class="meter-fill" id="in-pv-m"></span></span></div><span class="val" id="in-pv">-- W</span></div>
+        </div>
+      </div>
+      <div class="flow-block out">
+        <div class="label">Output</div>
+        <div class="total" id="out-total">-- W</div>
+        <div class="channels">
+          <div class="channel"><div class="row"><span class="name">AC</span><span class="meter"><span class="meter-fill" id="out-ac-m"></span></span></div><span class="val" id="out-ac">-- W</span></div>
+          <div class="channel"><div class="row"><span class="name">DC 12V</span><span class="meter"><span class="meter-fill" id="out-dc-m"></span></span></div><span class="val" id="out-dc">-- W</span></div>
+          <div class="channel"><div class="row"><span class="name">USB-PD</span><span class="meter"><span class="meter-fill" id="out-pd-m"></span></span></div><span class="val" id="out-pd">-- W</span></div>
+          <div class="channel"><div class="row"><span class="name">USB-A</span><span class="meter"><span class="meter-fill" id="out-usb-m"></span></span></div><span class="val" id="out-usb">-- W</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Device</h2>
+    <table id="device-table"><tbody><tr><td>—</td><td>—</td></tr></tbody></table>
+  </section>
+
+  <section class="panel">
+    <h2>Raw Attributes</h2>
+    <table id="attrs-table"><tbody></tbody></table>
+  </section>
+</main>
+
+<footer>Streaming over WebSocket. Updates pushed live by the backend.</footer>
+
+<script>
+const SCALE_MAX_W = 3000; // for meter bar visuals
+const $ = (id) => document.getElementById(id);
+const fmt = (v, u = "") => (v ?? "--") + (v !== undefined && v !== null ? " " + u : "");
+const meterPct = (w) => Math.min(100, Math.max(0, (w / SCALE_MAX_W) * 100));
+
+function render(snap) {
+  if (!snap) return;
+  const a = snap.attrs || {};
+  const dev = snap.device || {};
+  $("conn").textContent = snap.connected ? "connected" : "disconnected";
+  $("conn").className = "status " + (snap.connected ? "connected" : "disconnected");
+  $("meta").textContent = (dev.model || "Oupes") + " · " + (snap.host || "");
+
+  if (a.battery_level !== undefined) {
+    $("batt-pct").innerHTML = a.battery_level + '<span style="font-size:32px">%</span>';
+    $("batt-bar").style.width = a.battery_level + "%";
+  }
+  $("batt-time").textContent = "remaining: " + (a.remaining_time ?? "--") + " min";
+  if (a.battery_temp_f_x10 !== undefined) {
+    const f = a.battery_temp_f_x10 / 10;
+    const c = ((f - 32) * 5/9).toFixed(1);
+    $("batt-temp").textContent = `temp: ${f.toFixed(1)}°F (${c}°C)`;
+  }
+  $("batt-fast").textContent = "fast charge: " + (a.fast_charging ? "yes" : "no");
+  $("batt-switch").textContent = "switch: 0b" + (a.switch_status ?? 0).toString(2).padStart(3, "0");
+
+  $("in-total").textContent = fmt(a.total_input_power, "W");
+  $("out-total").textContent = fmt(a.total_output_power, "W");
+  const set = (id, v) => { $(id).textContent = fmt(v, "W"); };
+  set("in-ac", a.ac_input_power);  $("in-ac-m").style.width  = meterPct(a.ac_input_power || 0) + "%";
+  set("in-pv", a.pv_input_power);  $("in-pv-m").style.width  = meterPct(a.pv_input_power || 0) + "%";
+  set("out-ac", a.ac_output_power);   $("out-ac-m").style.width  = meterPct(a.ac_output_power || 0) + "%";
+  set("out-dc", a.dc12_output_power); $("out-dc-m").style.width  = meterPct(a.dc12_output_power || 0) + "%";
+  set("out-pd", a.pd_output_power);   $("out-pd-m").style.width  = meterPct(a.pd_output_power || 0) + "%";
+  set("out-usb", a.usb_output_power); $("out-usb-m").style.width = meterPct(a.usb_output_power || 0) + "%";
+
+  const devBody = $("device-table").querySelector("tbody");
+  devBody.innerHTML = "";
+  for (const [k, v] of Object.entries(dev)) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${k}</td><td>${v ?? "--"}</td>`;
+    devBody.appendChild(tr);
+  }
+
+  const body = $("attrs-table").querySelector("tbody");
+  body.innerHTML = "";
+  const ids = Object.keys(snap.attrs_by_id || {}).map(Number).sort((a,b)=>a-b);
+  for (const id of ids) {
+    const name = Object.entries(a).find(([n, _]) => n === ({}[id]))?.[0];
+    const known = Object.keys(a).find(k => snap.attrs_by_id[id] === a[k] && (k.startsWith("attr_") ? Number(k.slice(5)) === id : true));
+    const label = (snap.attrs && Object.keys(snap.attrs).find(k => k === "attr_" + id)) || (known || ("attr_" + id));
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>attr_${id}</td><td>${snap.attrs_by_id[id]}</td>`;
+    body.appendChild(tr);
+  }
+}
+
+function connect() {
+  const wsProto = location.protocol === "https:" ? "wss:" : "ws:";
+  const ws = new WebSocket(`${wsProto}//${location.host}/ws`);
+  ws.onmessage = (ev) => {
+    try {
+      const m = JSON.parse(ev.data);
+      if (m.type === "snapshot" || m.type === "update") render(m.snapshot);
+    } catch {}
+  };
+  ws.onclose = () => setTimeout(connect, 2000);
+  ws.onerror = () => ws.close();
+}
+connect();
+</script>
+</body>
+</html>

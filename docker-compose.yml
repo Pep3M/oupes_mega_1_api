@@ -1,0 +1,14 @@
+services:
+  oupes-api:
+    build: ./backend
+    container_name: oupes-api
+    restart: unless-stopped
+    # host network so UDP discovery broadcasts work on the LAN.
+    # If you only need TCP telemetry to a known IP, you can switch
+    # back to bridge networking + a published port.
+    network_mode: host
+    environment:
+      # Unset means auto-detect; see .env.example.
+      MEGA_HOST: ${MEGA_HOST:-}
+      HISTORY_SIZE: ${HISTORY_SIZE:-600}
+      PORT: ${PORT:-8765}
