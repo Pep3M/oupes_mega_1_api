@@ -18,7 +18,7 @@ Current observed state (firmware `sv 1.2.0`, hardware `hv 1.2.16`, product_id `O
 | 21  | total_input_power | ~40 |  |
 | 22  | ac_input_power | ~29 |  |
 | 23  | pv_input_power | ~13 | confirmed solar input is active |
-| 30  | remaining_time | swings 5940↔18602 | suspicious; needs investigation under load |
+| 30  | — (was `remaining_time`) | 244–6379, saturates at 5940 | **not a duration**; corr 0.90 with PV input power, 0.02 with output. Hypothesis: PV voltage in 0.01 V |
 | 32  | battery_temp_f_x10 | 1107 (110.7°F / ~43.7°C) |  |
 | 51  | — | 0 | undocumented; same frame as 1/3/4/30/32 |
 | 84  | — | 1 | arrives in `cmd:3` response frames (not `cmd:10` telemetry) |
@@ -48,12 +48,20 @@ For each, observe which attrs change. Repeat each toggle 3× to filter noise.
 7. **Fast charging toggle** (if exposed in the app)
 8. **Light / lamp button** (if present)
 9. **App actions** (every toggle in the Cleanergy app, one at a time)
-10. **Idle observation** for 30 minutes — see if `30` (remaining_time) settles or keeps oscillating.
+10. **Idle observation** for 30 minutes — see whether `30` settles or keeps oscillating.
 
 ### Hypotheses to validate
 - `2` → light status (the Mega 1 has a built-in lamp)
 - `9` → AC frequency, or anti-grid backfeed flag
-- `30` oscillation → it's actually `(seconds remaining) % 65536` or a rolling 16-bit counter unrelated to time. Confirm by running the unit until ~50% battery under a steady load and checking the trend.
+- `30` → **PV string voltage in centivolts.** Ruled out as a duration on 2026-08-22: sampled at
+  1 Hz for 600 frames with the pack pinned at 91%, it took 48 distinct values, oscillated second to
+  second (296 → 244 → 267 → 296), saturated at 5940, and correlated 0.90 with PV input power versus
+  0.02 with output power. Read as 0.01 V that is 59.4 V under load — a normal MPPT operating point —
+  and the previously logged 18602 becomes 186 V, plausible as open-circuit string voltage. Confirm by
+  metering the PV connector while watching the attribute, or by comparing against the voltage the
+  Cleanergy app reports. Until then it stays unmapped as `attr_30` so no consumer presents it as time.
+- **No attribute carries time-to-full or autonomy.** Both have to be derived from
+  `total_input_power - total_output_power`, the battery level, and the pack capacity.
 - `51` → error / status bitmask
 - `84` → ack from a command we didn't send (boot/keepalive heartbeat?)
 

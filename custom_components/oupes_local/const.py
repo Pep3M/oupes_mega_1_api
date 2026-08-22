@@ -16,7 +16,6 @@ SENSORS: dict[str, dict] = {
     "total_input_power":  {"name": "Total Input",       "unit": "W",   "device_class": "power",       "state_class": "measurement"},
     "ac_input_power":     {"name": "AC Input",          "unit": "W",   "device_class": "power",       "state_class": "measurement"},
     "pv_input_power":     {"name": "PV Input",          "unit": "W",   "device_class": "power",       "state_class": "measurement"},
-    "remaining_time":     {"name": "Remaining",         "unit": "min", "device_class": "duration",    "state_class": "measurement"},
 }
 
 BINARY_SENSORS: dict[str, dict] = {

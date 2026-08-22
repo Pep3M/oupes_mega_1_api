@@ -34,7 +34,14 @@ ATTR_MAPPING: dict[int, str] = {
     21:  "total_input_power",
     22:  "ac_input_power",
     23:  "pv_input_power",
-    30:  "remaining_time",
+    # 30 was mapped as "remaining_time" in minutes. It is not a duration:
+    # sampled at 1 Hz over 600 frames with the pack pinned at 91%, it moved
+    # through 48 distinct values, oscillating second to second (296 -> 244 ->
+    # 267 -> 296), saturating at 5940, and correlating 0.90 with PV input power
+    # against 0.02 with output power. A time-remaining field does none of that.
+    # Left unmapped so it surfaces as the honest `attr_30` rather than feeding
+    # a bogus duration into Home Assistant history. See PLAN.md for the
+    # PV-voltage hypothesis and the test that would confirm it.
     32:  "battery_temp_f_x10",
     105: "fast_charging",
 }
@@ -49,7 +56,6 @@ ATTR_UNITS: dict[str, str] = {
     "total_input_power": "W",
     "ac_input_power": "W",
     "pv_input_power": "W",
-    "remaining_time": "min",
     "battery_temp_f_x10": "0.1°F",
 }
 

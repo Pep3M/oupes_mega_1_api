@@ -54,6 +54,16 @@ class TestHumanize:
     def test_empty_input(self):
         assert protocol.humanize({}) == {}
 
+    def test_attr_30_stays_unmapped(self):
+        # Attribute 30 was once "remaining_time" in minutes. Measured at 1 Hz it
+        # oscillates second to second and correlates 0.90 with PV input power,
+        # so it is not a duration; PLAN.md tracks the PV-voltage hypothesis.
+        # Locked down here because a name like "remaining_time" is exactly the
+        # kind of plausible guess that gets re-added, and Home Assistant would
+        # then record it as a duration forever.
+        assert protocol.humanize({30: 5940}) == {"attr_30": 5940}
+        assert "remaining_time" not in protocol.ATTR_UNITS
+
 
 class TestDiscoveryResult:
     def test_parses_a_real_response(self):

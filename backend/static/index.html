@@ -72,7 +72,7 @@
     <div class="bar-wrap">
       <div class="bar"><div class="bar-fill" id="batt-bar" style="width:0%"></div></div>
       <div class="sub">
-        <span id="batt-time">remaining: -- min</span>
+        <span id="batt-flow">flow: --</span>
         <span id="batt-temp">temp: --</span>
         <span id="batt-fast">fast charge: --</span>
         <span id="batt-switch">switch: --</span>
@@ -135,7 +135,9 @@ function render(snap) {
     $("batt-pct").innerHTML = a.battery_level + '<span style="font-size:32px">%</span>';
     $("batt-bar").style.width = a.battery_level + "%";
   }
-  $("batt-time").textContent = "remaining: " + (a.remaining_time ?? "--") + " min";
+  const net = (a.total_input_power ?? 0) - (a.total_output_power ?? 0);
+  $("batt-flow").textContent = "flow: " + (net === 0 ? "idle"
+    : (net > 0 ? "charging +" : "discharging ") + net + " W");
   if (a.battery_temp_f_x10 !== undefined) {
     const f = a.battery_temp_f_x10 / 10;
     const c = ((f - 32) * 5/9).toFixed(1);

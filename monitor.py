@@ -27,7 +27,6 @@ ATTRS = {
     21:  ("total_input_power",   "W"),
     22:  ("ac_input_power",      "W"),
     23:  ("pv_input_power",      "W"),
-    30:  ("remaining_time",      "min"),
     32:  ("battery_temp_f_x10",  "0.1°F"),
     105: ("fast_charging",       ""),
 }
@@ -42,7 +41,7 @@ def fmt_temp_c(v_f_x10: int) -> str:
 def render(host):
     sys.stdout.write("\x1b[H\x1b[2J")  # clear screen
     print(f"=== Oupes @ {host}  {time.strftime('%H:%M:%S')} ===\n")
-    keys_in_order = [3, 4, 5, 6, 7, 8, 21, 22, 23, 30, 32, 1, 105]
+    keys_in_order = [3, 4, 5, 6, 7, 8, 21, 22, 23, 32, 1, 105]
     for k in keys_in_order:
         if k not in state:
             continue
