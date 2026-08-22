@@ -59,6 +59,10 @@ Read-only for now — see [`PLAN.md`](PLAN.md) for the work on write commands.
    it is the reliable option and skips discovery entirely — recommended if
    discovery was slow or flaky for you, or if you have more than one device.
 
+   Note that a sweep takes ~30s per subnet, so on a first start the backend can
+   be up and answering `/status` with `connected: false` for a while before it
+   finds anything. `docker compose logs -f oupes-api` shows the progress.
+
 3. Bring the backend up:
    ```
    docker compose up -d --build
@@ -77,6 +81,7 @@ dependencies beyond the standard library.
 | `HISTORY_SIZE` | `600` | Samples in the in-memory `/history` ring (~10 min). |
 | `PORT` | `8765` | Port for the API and dashboard. |
 | `DISCOVERY_RETRY_S` | `30` | Seconds between retries while no device is found. |
+| `LOG_LEVEL` | `INFO` | Backend log verbosity. `DEBUG` to see discovery detail. |
 
 The backend uses `network_mode: host` so UDP discovery reaches the LAN. If you
 pin `MEGA_HOST`, you can switch to bridge networking with a published port

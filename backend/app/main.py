@@ -30,6 +30,14 @@ from .protocol import (
     telemetry_frames,
 )
 
+# Uvicorn configures its own loggers but leaves the root logger alone, so
+# without this our discovery progress is silently dropped -- and a startup
+# that spends 30s sweeping the LAN just looks like a hang.
+logging.basicConfig(
+    level=(os.environ.get("LOG_LEVEL") or "INFO").upper(),
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+
 _LOGGER = logging.getLogger(__name__)
 
 # Explicit configuration always wins. Left unset, we auto-detect on the LAN --
