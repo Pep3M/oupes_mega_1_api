@@ -44,33 +44,33 @@ Read-only for now — see [`PLAN.md`](PLAN.md) for the work on write commands.
 
 ## Quick start
 
-1. Find the device:
-   ```
-   python3 discover.py
-   ```
-   It broadcasts first, then falls back to a unicast sweep of your local /24.
-   That fallback is there because plenty of consumer APs drop broadcast towards
-   WiFi clients — on those networks broadcast discovery never works and only
-   the sweep finds anything.
+```
+git clone https://github.com/Pep3M/oupes_mega_1_api.git
+cd oupes_mega_1_api
+docker compose up -d --build
+```
 
-2. Copy the sample config:
-   ```
-   cp .env.example .env
-   ```
-   Auto-detection runs at startup, so you can leave `MEGA_HOST` unset. Setting
-   it is the reliable option and skips discovery entirely — recommended if
-   discovery was slow or flaky for you, or if you have more than one device.
+Then open <http://localhost:8765> for the live dashboard.
 
-   Note that a sweep takes ~30s per subnet, so on a first start the backend can
-   be up and answering `/status` with `connected: false` for a while before it
-   finds anything. `docker compose logs -f oupes-api` shows the progress.
+That is the whole happy path. No config file is needed — the backend finds the
+device on the LAN by itself, and `docker-compose.yml` supplies a default for
+every variable.
 
-3. Bring the backend up:
-   ```
-   docker compose up -d --build
-   ```
+Discovery takes a moment, though. It broadcasts first, then falls back to a
+unicast sweep of your local /24, which costs ~30s per subnet. So on a first
+start `/status` answers with `connected: false` for a while before anything
+shows up. Watch it happen:
 
-4. Open <http://localhost:8765> for the live dashboard.
+```
+docker compose logs -f oupes-api
+```
+
+To pin the address instead of discovering it — faster, and the reliable choice
+if you have more than one device or your AP blocks broadcast:
+
+```
+cp .env.example .env      # then set MEGA_HOST
+```
 
 Prefer no Docker? `python3 monitor.py` gives you a terminal dashboard with no
 dependencies beyond the standard library.
@@ -147,6 +147,40 @@ Entities go unavailable when the backend loses its TCP session to the device
 
 For a direct-to-device integration with no backend, see
 [widewing/ha-oupes](https://github.com/widewing/ha-oupes).
+
+## Troubleshooting
+
+**Dashboard loads but everything is empty, `/status` says `connected: false`.**
+The backend is up and has not found the device. Give the sweep ~30s, then check
+the logs. If it keeps retrying, the device is not reachable from this host: run
+`python3 discover.py` to confirm, and if that finds nothing either, you are
+probably on a different subnet or a guest network. The protocol does not cross
+a router.
+
+**`discover.py` finds nothing but the Cleanergy app works.** The app goes
+through Oupes' cloud, so it works from anywhere and proves nothing about LAN
+reachability. Pass the subnet explicitly — `python3 discover.py 192.168.1` —
+in case the interface guess is wrong.
+
+**Your model shows up as `Unknown (<pid>)`.** It will still stream telemetry;
+only the display name is missing. Open an issue with the `discover.py` output
+and it gets added to the map.
+
+**HA shows the integration as "not loaded".** HA found a
+`custom_components/oupes_local/` directory but could not import it — almost
+always a wrong layout. `manifest.json` has to sit directly inside that
+directory, not one level deeper. Check for the real reason in Settings → System
+→ Logs, filtered by `oupes`.
+
+**The config flow fails with *cannot connect*.** The URL is wrong or the backend
+is unreachable from HA. See the note about `localhost` above, and verify from
+HA's own perspective rather than yours — if HA runs in Docker,
+`docker exec homeassistant curl -s http://<host>:8765/status` is the test that
+actually matters.
+
+**Entities exist but are all unavailable.** The backend lost its TCP session to
+the device (`connected: false`). That is the backend to fix, not the
+integration.
 
 ## Scripts
 
