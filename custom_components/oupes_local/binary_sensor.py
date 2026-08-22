@@ -38,7 +38,9 @@ class OupesBinary(CoordinatorEntity[OupesCoordinator], BinarySensorEntity):
 
     @property
     def available(self) -> bool:
-        return bool((self.coordinator.data or {}).get("connected"))
+        # The coordinator can be polling happily while the backend has lost the
+        # device, so both have to hold: fresh poll AND a live TCP session.
+        return super().available and bool((self.coordinator.data or {}).get("connected"))
 
     @property
     def device_info(self) -> dict:

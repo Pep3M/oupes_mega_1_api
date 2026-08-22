@@ -1,0 +1,19 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Oupes local bridge",
+        "description": "URL of the Oupes backend (FastAPI) on your network. If Home Assistant runs in a container, localhost is the container itself — use the backend host's address.",
+        "data": {
+          "base_url": "Base URL"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not reach the backend at that URL."
+    },
+    "abort": {
+      "already_configured": "This device is already configured."
+    }
+  }
+}

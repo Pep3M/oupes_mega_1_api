@@ -6,7 +6,8 @@
   "documentation": "https://github.com/Pep3M/oupes_mega_1_api",
   "issue_tracker": "https://github.com/Pep3M/oupes_mega_1_api/issues",
   "iot_class": "local_polling",
-  "requirements": ["aiohttp>=3.9"],
+  "dependencies": [],
+  "requirements": [],
   "codeowners": ["@Pep3M"],
   "integration_type": "device"
 }

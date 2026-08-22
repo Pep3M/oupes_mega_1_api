@@ -44,7 +44,7 @@ jobs:
           python-version: "3.12"
 
       - name: Check every module parses
-        run: python -m compileall -q backend/app tests tools *.py
+        run: python -m compileall -q backend/app tests tools custom_components *.py
 
       - name: Fail if a device address is hardcoded as a default
         run: |

@@ -115,14 +115,38 @@ it whether or not you run this.
 
 ## Home Assistant
 
-Copy `ha_integration/custom_components/oupes_local/` into your HA
-`config/custom_components/`, restart, then add **Oupes (local backend)** from
-Settings → Devices & Services. It asks for the backend's base URL, which
-defaults to `http://localhost:8765` — change the host if HA runs on a different
-machine from the backend.
+The integration lives in [`custom_components/oupes_local/`](custom_components/oupes_local)
+and talks to this backend over HTTP, not to the device directly. Run the backend
+first (see [Quick start](#quick-start)) and check that `/status` answers before adding it.
 
-The integration talks to this backend, not to the device directly. For a
-direct-to-device integration, see [widewing/ha-oupes](https://github.com/widewing/ha-oupes).
+### Install via HACS (recommended)
+
+HACS → ⋮ → **Custom repositories** → add `https://github.com/Pep3M/oupes_mega_1_api`
+with category **Integration**. Then install **Oupes (local backend)** and restart
+Home Assistant.
+
+### Install manually
+
+Copy `custom_components/oupes_local/` into your HA `config/custom_components/`
+and restart. The layout has to end up as
+`config/custom_components/oupes_local/manifest.json`.
+
+### Configure
+
+Settings → Devices & Services → **Add integration** → **Oupes (local backend)**.
+It asks for the backend's base URL.
+
+`http://localhost:8765` only works when Home Assistant and the backend share a
+network namespace. In every other setup — HAOS, a supervised install, HA in its
+own container — `localhost` is Home Assistant itself and the config flow will
+fail with *cannot connect*. Use the backend host's LAN address instead, e.g.
+`http://192.168.1.50:8765`.
+
+Entities go unavailable when the backend loses its TCP session to the device
+(`connected: false` in `/status`), rather than reporting stale numbers.
+
+For a direct-to-device integration with no backend, see
+[widewing/ha-oupes](https://github.com/widewing/ha-oupes).
 
 ## Scripts
 
