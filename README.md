@@ -1,5 +1,7 @@
 # oupes
 
+[![CI](https://github.com/Pep3M/oupes/actions/workflows/ci.yml/badge.svg)](https://github.com/Pep3M/oupes/actions/workflows/ci.yml)
+
 Local-network backend, dashboard, and Home Assistant integration for Oupes
 power stations.
 
@@ -137,11 +139,24 @@ directly attached to.
 | `probe.py`             | Unicast discovery + raw TCP dump, for protocol work. |
 | `tools/legacy/scan.py` | BLE advertisement scan. Only useful pre-WiFi-setup; needs `bleak`. |
 
+## Development
+
+```
+pip install -r backend/requirements.txt -r requirements-dev.txt
+python -m pytest
+```
+
+The tests run offline against captured frames and in-process fakes, so no
+device is needed.
+
 ## Contributing
 
-Protocol knowledge is the bottleneck, not code. The most useful contributions
-are `discover.py` output from a model that is not in the map yet, and
-identifications for the undocumented attribute IDs listed in `PLAN.md`.
+Protocol knowledge is the bottleneck here, not code. The most useful
+contributions are `discover.py` output from a model that is not in the map yet,
+and identifications for the undocumented attribute IDs listed in `PLAN.md` —
+both are valuable with no code attached.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Credits
 

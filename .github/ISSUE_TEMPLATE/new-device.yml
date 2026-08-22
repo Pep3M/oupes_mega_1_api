@@ -1,0 +1,46 @@
+name: Report a device
+description: Your Oupes model is not recognised, or its telemetry looks wrong.
+title: "[device] "
+labels: ["device-support"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks — this is the most useful kind of issue for this project.
+        Adding a model is usually a one-line change once we know its `pid`.
+
+  - type: input
+    id: model
+    attributes:
+      label: Model
+      description: What the unit is called on the box.
+      placeholder: Oupes Exodus 1500
+    validations:
+      required: true
+
+  - type: textarea
+    id: discover
+    attributes:
+      label: Output of `python3 discover.py`
+      description: >
+        Paste it as-is. The `pid` is what identifies the model. `did` and `mac`
+        are unique to your unit — feel free to redact them, they are not needed.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: telemetry
+    attributes:
+      label: Output of `python3 monitor.py`
+      description: >
+        Optional but very helpful. If any value is obviously wrong (output power
+        reading as battery percentage, say), tell us which — the attribute IDs
+        were mapped on a Mega 1 and may not be identical on your unit.
+      render: text
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: What works, what doesn't, what you expected.
