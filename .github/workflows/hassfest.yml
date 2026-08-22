@@ -21,3 +21,9 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
+          # The brands check wants an icon and logo submitted to
+          # home-assistant/brands. That is a requirement for listing in the
+          # HACS default store, not for installing this as a custom
+          # repository, which is how the README tells people to add it.
+          # Drop this line if it ever gets submitted upstream.
+          ignore: brands

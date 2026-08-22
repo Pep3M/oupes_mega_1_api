@@ -1,13 +1,13 @@
 {
   "domain": "oupes_local",
   "name": "Oupes (local backend)",
-  "version": "0.1.0",
-  "config_flow": true,
-  "documentation": "https://github.com/Pep3M/oupes_mega_1_api",
-  "issue_tracker": "https://github.com/Pep3M/oupes_mega_1_api/issues",
-  "iot_class": "local_polling",
-  "dependencies": [],
-  "requirements": [],
   "codeowners": ["@Pep3M"],
-  "integration_type": "device"
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/Pep3M/oupes_mega_1_api",
+  "integration_type": "device",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/Pep3M/oupes_mega_1_api/issues",
+  "requirements": [],
+  "version": "0.1.0"
 }
