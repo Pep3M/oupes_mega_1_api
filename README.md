@@ -1,6 +1,6 @@
 # oupes
 
-[![CI](https://github.com/Pep3M/oupes/actions/workflows/ci.yml/badge.svg)](https://github.com/Pep3M/oupes/actions/workflows/ci.yml)
+[![CI](https://github.com/Pep3M/oupes_mega_1_api/actions/workflows/ci.yml/badge.svg)](https://github.com/Pep3M/oupes_mega_1_api/actions/workflows/ci.yml)
 
 Local-network backend, dashboard, and Home Assistant integration for Oupes
 power stations.
