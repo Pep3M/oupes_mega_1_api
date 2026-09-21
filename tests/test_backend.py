@@ -6,15 +6,21 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import main
+from app.recorder import BatteryRecorder
 
 
 @pytest.fixture
-def state():
-    """A fresh State, so tests do not leak into each other via the module global."""
-    fresh = main.State()
+def state(tmp_path):
+    """A fresh State, so tests do not leak into each other via the module global.
+
+    The recorder is pointed at a tmp database: the default would be the real
+    one under /data or ~/.local/state, and a test run must not write there.
+    """
+    fresh = main.State(recorder=BatteryRecorder(tmp_path / "battery.db"))
     original = main.state
     main.state = fresh
     yield fresh
+    fresh.recorder.close()
     main.state = original
 
 
@@ -57,7 +63,9 @@ class TestStateMerge:
         assert len(state.history) == 3
 
     async def test_history_is_bounded(self, state):
-        small = main.State()
+        # Disabled recorder: this State is built by hand, so it would
+        # otherwise reach for the real default database.
+        small = main.State(recorder=BatteryRecorder(""))
         small.history = type(small.history)(maxlen=2)
         for value in range(5):
             await small.merge_and_broadcast(frame(**{"3": value}))
@@ -144,6 +152,37 @@ class TestEndpoints:
         body = client.get("/history?limit=3").json()
         assert body["count"] == 3
         assert body["items"][-1]["attrs_by_id"]["3"] == 9
+
+    def test_battery_history_is_empty_before_anything_is_recorded(self, client):
+        body = client.get("/battery/history").json()
+        assert body["enabled"] is True
+        assert body["items"] == []
+
+    def test_battery_history_returns_what_the_frames_recorded(self, client, state):
+        import time
+
+        now = time.time()
+        state.recorder.record(now - 120, {"battery_level": 90, "total_output_power": 200})
+        state.recorder.record(now - 60, {"battery_level": 89, "total_output_power": 210})
+        body = client.get("/battery/history?hours=1&points=60").json()
+        assert [i["level"] for i in body["items"]] == [90.0, 89.0]
+        assert (body["min"], body["max"]) == (89, 90)
+
+    def test_battery_history_clamps_absurd_arguments(self, client):
+        # hours=0 would divide by zero downstream; points=100000 would ask
+        # SQLite to group a month into one-second buckets.
+        body = client.get("/battery/history?hours=0&points=100000").json()
+        assert body["bucket_s"] >= 1
+
+    def test_status_reports_no_expansion_pack_by_default(self, client, state):
+        state.latest_by_id[3] = 64
+        assert client.get("/status").json()["expansion"] is False
+
+    def test_status_reports_an_attached_expansion_pack(self, client, state):
+        state.latest_by_id.update({3: 64, 79: 70, 80: 915})
+        body = client.get("/status").json()
+        assert body["expansion"] is True
+        assert body["attrs"]["expansion_battery_level"] == 70
 
     def test_attrs_documents_the_mapping(self, client):
         body = client.get("/attrs").json()

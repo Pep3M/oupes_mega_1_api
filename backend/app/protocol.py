@@ -13,7 +13,7 @@ import socket
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, asdict
-from typing import AsyncIterator, Iterable
+from typing import Any, AsyncIterator, Iterable
 
 UDP_PORT = 6095
 TCP_PORT = 5555
@@ -43,8 +43,57 @@ ATTR_MAPPING: dict[int, str] = {
     # a bogus duration into Home Assistant history. See PLAN.md for the
     # PV-voltage hypothesis and the test that would confirm it.
     32:  "battery_temp_f_x10",
+    53:  "expansion_pv_input_power",
+    # 78 is the expansion pack's analogue of the still-unexplained 30: it holds
+    # the same saturated 5940 whenever 30 does. Left unmapped for the same
+    # reason 30 is.
+    79:  "expansion_battery_level",
+    80:  "expansion_battery_temp_f_x10",
     105: "fast_charging",
 }
+
+# 79/80 were identified on 2026-09-19, the day a B2 expansion battery was
+# attached to the Mega 1, by watching them against the pack's own 3/32:
+#   - 79 sat at 69-70% while 3 sat at 66-67%, and both climbed under a 650 W
+#     charge, stepping at different seconds. A pack's state of charge cannot
+#     lead itself by three points, so these are two packs.
+#   - 80 read 915 against 32's 1051 -- the same tenths-of-Fahrenheit encoding
+#     (91.5F vs 105.1F), which is what a second, cooler pack looks like.
+# Neither id shows up in any frame captured before that day -- the two fixed in
+# tests/test_protocol.py carry exactly the documented set -- which is what rules
+# out "these were always here and we simply never looked".
+# Neither appears in widewing/ha-oupes either, so this mapping is ours alone, and
+# it is inferred from co-observation rather than documentation. Every consumer
+# therefore treats the pair as optional and renders nothing when it is absent.
+# Unplugging the B2 should make 79/80 leave the stream -- if they persist, this
+# reading is wrong and the names have to go.
+#
+# 53 is the expansion pack's own solar input, identified 2026-09-21 with panels
+# feeding the B2 and nothing on the station's AC: 21 (the input total) read 493
+# while 22 and 23 sat flat at 0, and 53 read 494. Sampled at 1 Hz for ~100
+# frames it tracked 21 to within +/-3 W in steady state, the wider excursions
+# being cloud transients where the two land in different frames. In the AC
+# charging session the day before, 53 was 0 and 22 carried the whole 646 W.
+# So 23 is the station's PV input and 53 is the pack's -- which matches the
+# hardware: a B2 takes solar and has no AC input of its own.
+#
+# 54 stays unmapped. It holds a flat 9-10 whenever 53 is non-zero and 0 when it
+# is not, never moving while 53 swings between 155 W and 471 W, so whatever it
+# counts it is not power.
+EXPANSION_ATTRS: tuple[str, ...] = (
+    "expansion_battery_level",
+    "expansion_battery_temp_f_x10",
+    "expansion_pv_input_power",
+)
+
+
+def has_expansion(attrs: dict[str, Any]) -> bool:
+    """Whether the telemetry shows an expansion pack attached.
+
+    Presence of the attribute is the whole test: the device stops reporting
+    these ids when nothing is bolted on.
+    """
+    return attrs.get("expansion_battery_level") is not None
 
 ATTR_UNITS: dict[str, str] = {
     "battery_level": "%",
@@ -57,6 +106,9 @@ ATTR_UNITS: dict[str, str] = {
     "ac_input_power": "W",
     "pv_input_power": "W",
     "battery_temp_f_x10": "0.1°F",
+    "expansion_battery_level": "%",
+    "expansion_battery_temp_f_x10": "0.1°F",
+    "expansion_pv_input_power": "W",
 }
 
 

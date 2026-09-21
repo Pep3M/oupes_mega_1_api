@@ -65,6 +65,57 @@ class TestHumanize:
         assert "remaining_time" not in protocol.ATTR_UNITS
 
 
+class TestExpansionBattery:
+    """Attributes 79/80, seen once a B2 expansion pack is bolted on."""
+
+    def test_the_expansion_pair_is_named(self):
+        assert protocol.humanize({79: 70, 80: 915}) == {
+            "expansion_battery_level": 70,
+            "expansion_battery_temp_f_x10": 915,
+        }
+
+    def test_the_expansion_solar_input_is_named(self):
+        # Without this the panel showed an input total its own channel
+        # breakdown could not account for: 459 W over two channels at 0 W.
+        assert protocol.humanize({53: 494}) == {"expansion_pv_input_power": 494}
+        assert protocol.ATTR_UNITS["expansion_pv_input_power"] == "W"
+
+    def test_the_two_solar_inputs_stay_separate(self):
+        # 23 is the station's PV input, 53 the pack's. Collapsing them would
+        # double-count when both are live.
+        assert protocol.humanize({23: 2, 53: 494}) == {
+            "pv_input_power": 2,
+            "expansion_pv_input_power": 494,
+        }
+
+    def test_attr_54_stays_unmapped(self):
+        # Flat 9-10 whenever 53 is non-zero, 0 when it is not, unmoved while 53
+        # swings 155-471 W. Whatever it counts, it is not power.
+        assert protocol.humanize({54: 10}) == {"attr_54": 10}
+
+    def test_attr_78_stays_unmapped(self):
+        # 78 tracks the unexplained 30 -- both pinned at 5940 -- so it gets the
+        # same treatment: no name until it is understood.
+        assert protocol.humanize({78: 5940}) == {"attr_78": 5940}
+
+    def test_the_expansion_temperature_keeps_the_packs_encoding(self):
+        # Same tenths-of-Fahrenheit unit as attribute 32, which is what let the
+        # two be recognised as a matched pair in the first place.
+        assert (
+            protocol.ATTR_UNITS["expansion_battery_temp_f_x10"]
+            == protocol.ATTR_UNITS["battery_temp_f_x10"]
+        )
+
+    def test_presence_follows_the_attribute(self):
+        assert protocol.has_expansion({"battery_level": 64}) is False
+        assert protocol.has_expansion({"expansion_battery_level": 70}) is True
+
+    def test_an_empty_pack_is_present_not_absent(self):
+        # 0 % is a reading; the distinction matters because a client that tests
+        # truthiness would hide a flat expansion pack exactly when it matters.
+        assert protocol.has_expansion({"expansion_battery_level": 0}) is True
+
+
 class TestDiscoveryResult:
     def test_parses_a_real_response(self):
         r = protocol.DiscoveryResult.from_response(DISCOVERY_RESPONSE, "192.0.2.50")

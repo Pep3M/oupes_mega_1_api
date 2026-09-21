@@ -18,6 +18,14 @@ SENSORS: dict[str, dict] = {
     "pv_input_power":     {"name": "PV Input",          "unit": "W",   "device_class": "power",       "state_class": "measurement"},
 }
 
+# Created only when /status reports `expansion: true`. Registering them
+# unconditionally would hand every B2-less install a set of permanently
+# unavailable entities, and HA keeps those in the registry forever.
+EXPANSION_SENSORS: dict[str, dict] = {
+    "expansion_battery_level": {"name": "Expansion Battery Level", "unit": "%", "device_class": "battery", "state_class": "measurement"},
+    "expansion_pv_input_power": {"name": "Expansion PV Input", "unit": "W", "device_class": "power", "state_class": "measurement"},
+}
+
 BINARY_SENSORS: dict[str, dict] = {
     "fast_charging": {"name": "Fast Charging", "device_class": "battery_charging"},
 }

@@ -8,7 +8,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import OupesCoordinator
-from .const import DOMAIN, SENSORS
+from .const import DOMAIN, EXPANSION_SENSORS, SENSORS
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEntitiesCallback) -> None:
@@ -17,7 +17,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEnt
     for key, spec in SENSORS.items():
         entities.append(OupesSensor(coord, entry, key, spec))
     # Derived: battery temp in Celsius from F*10.
-    entities.append(BatteryTempC(coord, entry))
+    entities.append(TempC(coord, entry, "battery_temp_f_x10", "Battery Temperature", "battery_temp_c"))
+    # An expansion pack is decided once, from the first poll. Bolting a B2 on
+    # to a running system therefore needs a reload of the config entry before
+    # its entities appear -- which is the right trade against permanently
+    # unavailable entities on every install that never had one.
+    if (coord.data or {}).get("expansion"):
+        for key, spec in EXPANSION_SENSORS.items():
+            entities.append(OupesSensor(coord, entry, key, spec))
+        entities.append(
+            TempC(
+                coord,
+                entry,
+                "expansion_battery_temp_f_x10",
+                "Expansion Battery Temperature",
+                "expansion_battery_temp_c",
+            )
+        )
     add(entities)
 
 
@@ -63,21 +79,26 @@ class OupesSensor(CoordinatorEntity[OupesCoordinator], SensorEntity):
         }
 
 
-class BatteryTempC(CoordinatorEntity[OupesCoordinator], SensorEntity):
+class TempC(CoordinatorEntity[OupesCoordinator], SensorEntity):
+    """A tenths-of-Fahrenheit attribute republished in Celsius."""
+
     _attr_has_entity_name = True
-    _attr_name = "Battery Temperature"
     _attr_native_unit_of_measurement = "°C"
     _attr_device_class = SensorDeviceClass.TEMPERATURE
     _attr_state_class = SensorStateClass.MEASUREMENT
 
-    def __init__(self, coord: OupesCoordinator, entry: ConfigEntry) -> None:
+    def __init__(
+        self, coord: OupesCoordinator, entry: ConfigEntry, key: str, name: str, unique: str
+    ) -> None:
         super().__init__(coord)
-        self._attr_unique_id = f"{entry.entry_id}_battery_temp_c"
+        self._key = key
+        self._attr_name = name
+        self._attr_unique_id = f"{entry.entry_id}_{unique}"
         self._entry_id = entry.entry_id
 
     @property
     def native_value(self):
-        v = ((self.coordinator.data or {}).get("attrs") or {}).get("battery_temp_f_x10")
+        v = ((self.coordinator.data or {}).get("attrs") or {}).get(self._key)
         if v is None:
             return None
         f = v / 10

@@ -20,12 +20,14 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from .recorder import BatteryRecorder, default_db_path
 from .protocol import (
     ATTR_MAPPING,
     ATTR_UNITS,
     MODEL_MAPPING,
     discover,
     discover_all,
+    has_expansion,
     humanize,
     telemetry_frames,
 )
@@ -45,6 +47,12 @@ _LOGGER = logging.getLogger(__name__)
 # that should just pin MEGA_HOST.
 MEGA_HOST = (os.environ.get("MEGA_HOST") or "").strip() or None
 HISTORY_SIZE = int(os.environ.get("HISTORY_SIZE", "600"))  # ~10 minutes at 1Hz
+# Long-term battery series. Empty HISTORY_DB disables persistence entirely;
+# unset picks the volume in the container and the user state dir outside it.
+_HISTORY_DB_ENV = os.environ.get("HISTORY_DB")
+HISTORY_DB = default_db_path() if _HISTORY_DB_ENV is None else _HISTORY_DB_ENV.strip()
+BATTERY_SAMPLE_S = float(os.environ.get("BATTERY_SAMPLE_S", "60"))
+BATTERY_RETENTION_DAYS = float(os.environ.get("BATTERY_RETENTION_DAYS", "30"))
 DISCOVERY_RETRY_S = float(os.environ.get("DISCOVERY_RETRY_S", "30"))
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
@@ -52,24 +60,34 @@ STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 class State:
     """Live state plus subscriber fanout. Single instance per process."""
 
-    def __init__(self) -> None:
+    def __init__(self, recorder: BatteryRecorder | None = None) -> None:
         self.host: str | None = MEGA_HOST
         self.latest_by_id: dict[int, Any] = {}
         self.last_frame_at: float | None = None
         self.connected: bool = False
         self.device_info: dict[str, Any] | None = None
         self.history: deque[dict[str, Any]] = deque(maxlen=HISTORY_SIZE)
+        self.recorder = recorder or BatteryRecorder(
+            HISTORY_DB,
+            sample_interval_s=BATTERY_SAMPLE_S,
+            retention_days=BATTERY_RETENTION_DAYS,
+        )
         self.subscribers: set[WebSocket] = set()
         self._lock = asyncio.Lock()
 
     def snapshot(self) -> dict[str, Any]:
+        attrs = humanize(self.latest_by_id)
         return {
             "connected": self.connected,
             "host": self.host,
             "device": self.device_info,
             "last_frame_at": self.last_frame_at,
             "attrs_by_id": dict(self.latest_by_id),
-            "attrs": humanize(self.latest_by_id),
+            "attrs": attrs,
+            # Stated outright so clients don't each reinvent the presence test
+            # -- and so "no expansion pack" stays distinguishable from "an
+            # expansion pack reading 0 %".
+            "expansion": has_expansion(attrs),
             "units": ATTR_UNITS,
         }
 
@@ -88,6 +106,9 @@ class State:
             self.latest_by_id[k] = v
         self.last_frame_at = time.time()
         self.history.append({"t": self.last_frame_at, "attrs_by_id": dict(self.latest_by_id)})
+        # Cheap enough to keep on the frame path: the recorder drops all but
+        # one sample a minute before it touches the database.
+        self.recorder.record(self.last_frame_at, humanize(self.latest_by_id))
         if not changed:
             return
         event = {
@@ -187,6 +208,7 @@ async def lifespan(app: FastAPI):
             await task
         except asyncio.CancelledError:
             pass
+        state.recorder.close()
 
 
 app = FastAPI(title="Oupes Local Backend", lifespan=lifespan)
@@ -211,6 +233,14 @@ async def get_raw() -> dict[str, Any]:
 async def get_history(limit: int = 120) -> dict[str, Any]:
     items = list(state.history)[-limit:]
     return {"count": len(items), "items": items}
+
+
+@app.get("/battery/history")
+async def get_battery_history(hours: float = 24.0, points: int = 240) -> dict[str, Any]:
+    """Persisted charge curve for the last `hours`, downsampled to `points`."""
+    hours = min(max(hours, 0.1), 24 * 90)
+    points = min(max(points, 2), 2000)
+    return await asyncio.to_thread(state.recorder.series, hours, points)
 
 
 @app.get("/attrs")

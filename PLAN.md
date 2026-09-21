@@ -20,9 +20,56 @@ Current observed state (firmware `sv 1.2.0`, hardware `hv 1.2.16`, product_id `O
 | 23  | pv_input_power | ~13 | confirmed solar input is active |
 | 30  | — (was `remaining_time`) | 244–6379, saturates at 5940 | **not a duration**; corr 0.90 with PV input power, 0.02 with output. Hypothesis: PV voltage in 0.01 V |
 | 32  | battery_temp_f_x10 | 1107 (110.7°F / ~43.7°C) |  |
-| 51  | — | 0 | undocumented; same frame as 1/3/4/30/32 |
+| 51  | — | 1 | undocumented; same frame as 1/3/4/30/32 |
+| 53  | `expansion_pv_input_power` | 494 | **appeared with the B2**; the pack's own solar input — see below |
+| 54  | — | 10 | undocumented; **appeared with the B2**; flat 9–10 whenever 53 is non-zero, 0 when it is not — not power |
+| 78  | — | 5940 | **appeared with the B2**; holds whatever 30 holds — the expansion pack's analogue of the same unknown quantity |
+| 79  | `expansion_battery_level` | 82 | **appeared with the B2**; see below |
+| 80  | `expansion_battery_temp_f_x10` | 922 (92.2°F / ~33.4°C) | **appeared with the B2**; see below |
 | 84  | — | 1 | arrives in `cmd:3` response frames (not `cmd:10` telemetry) |
+| 101 | — | 1 | undocumented; **appeared with the B2** |
 | 105 | fast_charging | 0 |  |
+
+### The B2 expansion battery (2026-09-19)
+
+Attaching a B2 expansion battery added six ids to the stream — 53, 54, 78, 79,
+80 and 101 — none of which appears in the frames captured before it (the two
+`cmd:10` frames fixed in `tests/test_protocol.py` carry exactly the documented
+set) nor in widewing/ha-oupes. Two of the six were identifiable straight away:
+
+- **79 is a second state of charge.** Sampled at 1 Hz under a 650 W charge it
+  sat at 69–70 % while attribute 3 sat at 66–67 %, and the two stepped at
+  different seconds. A pack's own charge cannot lead itself by three points.
+  Re-checked after a reboot and a long charge, the pair had risen to 81/82 —
+  still two independent readings, still converging rather than locked.
+- **80 is a second temperature**, in attribute 32's tenths-of-Fahrenheit
+  encoding: 915 against 32's 1051, i.e. 91.5°F against 105.1°F, which is what
+  a second and cooler pack looks like.
+
+A third fell out on 2026-09-21, when the panels were moved onto the B2:
+
+- **53 is the pack's own solar input.** With nothing on the station's AC, 21
+  (the input total) read 493 while 22 and 23 sat flat at 0 and 53 read 494.
+  Over ~100 frames at 1 Hz it tracked 21 to within ±3 W in steady state, the
+  wider excursions being cloud transients where the two land in different
+  frames. In the AC session the day before, 53 was 0 and 22 carried the whole
+  646 W. So 23 is the station's PV input and 53 is the pack's, which matches
+  the hardware — a B2 takes solar and has no AC input of its own.
+
+  This one surfaced as a visible defect rather than an experiment: the panel
+  showed `ENTRADA · 459 W` above two channels both reading 0 W, a total its
+  own breakdown could not account for.
+
+54, 78 and 101 stay unmapped. 54 holds a flat 9–10 whenever 53 is non-zero and
+0 when it is not, never moving while 53 swings between 155 W and 471 W, so
+whatever it counts it is not power. 78 is the interesting one — it tracks the
+still-unexplained 30 exactly, so whatever 30 turns out to mean, 78 is the
+expansion pack's copy of it, and confirming one confirms both.
+
+**The experiment that would settle this:** unplug the B2 and watch whether
+79/80 leave the stream. They should. If they persist, the mapping is wrong and
+the names have to be withdrawn — every consumer treats the pair as optional and
+renders nothing when it is absent, so nothing breaks either way.
 
 ## Phase 1 — Map undocumented attributes (read-only)
 

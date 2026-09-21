@@ -81,6 +81,9 @@ dependencies beyond the standard library.
 |---|---|---|
 | `MEGA_HOST` | *(auto-detect)* | Device address. Set it to skip discovery. |
 | `HISTORY_SIZE` | `600` | Samples in the in-memory `/history` ring (~10 min). |
+| `HISTORY_DB` | `/data/battery.db` | SQLite file behind `/battery/history`. Empty disables persistence. |
+| `BATTERY_SAMPLE_S` | `60` | Seconds between stored battery samples. |
+| `BATTERY_RETENTION_DAYS` | `30` | How long stored samples are kept. |
 | `PORT` | `8765` | Port for the API and dashboard. |
 | `DISCOVERY_RETRY_S` | `30` | Seconds between retries while no device is found. |
 | `LOG_LEVEL` | `INFO` | Backend log verbosity. `DEBUG` to see discovery detail. |
@@ -106,12 +109,34 @@ it whether or not you run this.
 | Path        | Method | Purpose                                            |
 |-------------|--------|----------------------------------------------------|
 | `/`         | GET    | Browser dashboard (served from `backend/static/`). |
-| `/status`   | GET    | Latest merged state + device info.                 |
+| `/status`   | GET    | Latest merged state + device info, plus `expansion` (see below). |
 | `/raw`      | GET    | Raw `attr_id → value` map.                         |
 | `/history`  | GET    | In-memory ring buffer (`?limit=`).                 |
+| `/battery/history` | GET | Persisted charge curve (`?hours=&points=`), downsampled. |
 | `/attrs`    | GET    | Attribute map + units.                             |
 | `/discover` | GET    | Trigger a fresh LAN discovery.                     |
 | `/ws`       | WS     | Live updates. First frame is a `snapshot`.         |
+
+## Expansion batteries
+
+Bolting an expansion pack (a B2) onto the station adds its own state of charge,
+temperature and solar input to the telemetry, as `expansion_battery_level`,
+`expansion_battery_temp_f_x10` and `expansion_pv_input_power`. The pack's solar
+input is reported separately from the station's `pv_input_power`, and a B2 has
+no AC input of its own, so a client that only sums the station's channels will
+show an input total its own breakdown cannot account for. `/status` reports
+`expansion: true` while one is attached, so clients don't each reinvent the
+presence test — and so "no pack" is distinguishable from "a pack reading 0 %".
+
+Everything downstream is presence-driven: with no expansion pack the payload,
+the Home Assistant entities and the persisted history are exactly what they were
+before. `/battery/history` rows carry an `ext` field only for the stretches where
+a pack was actually reporting, so a chart draws the second curve from the moment
+the pack was attached rather than back to the origin.
+
+These attribute IDs (79, 80 and 53) are our own identification, inferred from
+watching them against the station's own rather than from documentation —
+[`PLAN.md`](PLAN.md) records the evidence and the experiment that would refute it.
 
 ## Home Assistant
 
@@ -144,6 +169,14 @@ fail with *cannot connect*. Use the backend host's LAN address instead, e.g.
 
 Entities go unavailable when the backend loses its TCP session to the device
 (`connected: false` in `/status`), rather than reporting stale numbers.
+
+Expansion-battery entities (*Expansion Battery Level*, *Expansion Battery
+Temperature* and *Expansion PV Input*) are created only if `/status` reports
+`expansion: true` at setup —
+registering them unconditionally would hand every install without a B2 a pair of
+permanently unavailable entities, and Home Assistant keeps those in the registry
+forever. Attaching a pack to a running system therefore needs a reload of the
+integration before its entities show up.
 
 For a direct-to-device integration with no backend, see
 [widewing/ha-oupes](https://github.com/widewing/ha-oupes).

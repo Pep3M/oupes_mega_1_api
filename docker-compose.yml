@@ -11,6 +11,16 @@ services:
       # Unset means auto-detect; see .env.example.
       MEGA_HOST: ${MEGA_HOST:-}
       HISTORY_SIZE: ${HISTORY_SIZE:-600}
+      HISTORY_DB: ${HISTORY_DB:-/data/battery.db}
+      BATTERY_SAMPLE_S: ${BATTERY_SAMPLE_S:-60}
+      BATTERY_RETENTION_DAYS: ${BATTERY_RETENTION_DAYS:-30}
       PORT: ${PORT:-8765}
       DISCOVERY_RETRY_S: ${DISCOVERY_RETRY_S:-30}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    # The long-term battery series lives here. Without the volume the curve
+    # restarts from nothing every time the image is rebuilt.
+    volumes:
+      - oupes-data:/data
+
+volumes:
+  oupes-data:
