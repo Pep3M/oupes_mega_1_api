@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import socket
 
 from app import protocol
 
@@ -289,3 +290,61 @@ class TestTelemetryFrames:
 
         assert attempts == 2
         assert frame["cmd"] == 10
+
+    async def test_a_silent_device_counts_as_a_drop(self):
+        # A device that loses power never closes its end: the socket stays open
+        # and, without a read timeout, the backend waited on it for hours while
+        # still reporting itself connected.
+        attempts = 0
+        release = asyncio.Event()
+
+        async def handle(reader, writer):
+            nonlocal attempts
+            attempts += 1
+            await reader.read(200)
+            if attempts == 1:
+                await release.wait()  # hold the socket open, say nothing
+            else:
+                writer.write(FRAME_A + b"\r\n")
+                await writer.drain()
+            await _close(writer)
+
+        drops = 0
+
+        async def on_disconnect():
+            nonlocal drops
+            drops += 1
+
+        server = await asyncio.start_server(handle, "127.0.0.1", 0)
+        port = server.sockets[0].getsockname()[1]
+        async with server:
+            gen = protocol.telemetry_frames(
+                "127.0.0.1", port, read_timeout=0.2, on_disconnect=on_disconnect
+            )
+            frame = await asyncio.wait_for(gen.__anext__(), timeout=10)
+            await gen.aclose()
+            release.set()
+
+        assert drops == 1
+        assert frame["cmd"] == 10
+
+    async def test_gives_up_after_max_failures(self):
+        # Nothing listens on this port: every attempt is refused.
+        sock = socket.socket()
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+        sock.close()
+
+        drops = 0
+
+        async def on_disconnect():
+            nonlocal drops
+            drops += 1
+
+        gen = protocol.telemetry_frames(
+            "127.0.0.1", port, on_disconnect=on_disconnect, max_failures=2
+        )
+        frames = [f async for f in gen]
+
+        assert frames == []
+        assert drops == 2

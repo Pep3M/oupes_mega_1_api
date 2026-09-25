@@ -9,11 +9,14 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import json
+import logging
 import socket
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, asdict
-from typing import Any, AsyncIterator, Iterable
+from typing import Any, AsyncIterator, Awaitable, Callable, Iterable
+
+_LOGGER = logging.getLogger(__name__)
 
 UDP_PORT = 6095
 TCP_PORT = 5555
@@ -307,6 +310,10 @@ def discover_all(timeout: float = 3.0, subnets: Iterable[str] | None = None) -> 
 
 
 HEARTBEAT_INTERVAL_S = 10.0
+# The device pushes a frame every few seconds and answers each heartbeat, so a
+# silence this long means it is gone, not idle.
+READ_TIMEOUT_S = 30.0
+CONNECT_TIMEOUT_S = 10.0
 
 
 def heartbeat_payload() -> bytes:
@@ -334,33 +341,54 @@ async def _heartbeat_task(writer: asyncio.StreamWriter) -> None:
         await asyncio.sleep(HEARTBEAT_INTERVAL_S)
 
 
-async def telemetry_frames(host: str, port: int = TCP_PORT) -> AsyncIterator[dict]:
+async def telemetry_frames(
+    host: str,
+    port: int = TCP_PORT,
+    *,
+    read_timeout: float = READ_TIMEOUT_S,
+    connect_timeout: float = CONNECT_TIMEOUT_S,
+    on_disconnect: Callable[[], Awaitable[None]] | None = None,
+    max_failures: int | None = None,
+) -> AsyncIterator[dict]:
     """Async generator over telemetry frames from a device.
 
     Sends an initial heartbeat right after connect (the device seems to gate
     its `cmd:10` stream on at least one inbound message), then keeps a 10s
     heartbeat task running in parallel. Reconnects with backoff on any failure.
+
+    A device that loses power or WiFi never closes its end, so the socket stays
+    open and a bare read waits forever. `read_timeout` turns that silence into a
+    drop. `on_disconnect` runs after every drop and every failed attempt, so the
+    caller can stop presenting the last frame as live. With `max_failures` set,
+    the generator ends after that many consecutive attempts without a frame --
+    the cue for a caller that auto-detected `host` to go looking again, since
+    DHCP does move the device.
     """
     backoff = 1.0
+    failures = 0
     while True:
         hb_task: asyncio.Task | None = None
         try:
-            reader, writer = await asyncio.open_connection(host, port)
-            backoff = 1.0
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection(host, port), connect_timeout
+            )
             # Kick the stream open with an immediate heartbeat.
             writer.write(heartbeat_payload())
             await writer.drain()
             hb_task = asyncio.create_task(_heartbeat_task(writer))
             try:
                 while True:
-                    line = await reader.readuntil(b"\r\n")
+                    line = await asyncio.wait_for(reader.readuntil(b"\r\n"), read_timeout)
                     line = line.rstrip(b"\r\n")
                     if not line:
                         continue
                     try:
-                        yield json.loads(line)
+                        frame = json.loads(line)
                     except json.JSONDecodeError:
                         continue
+                    backoff = 1.0
+                    failures = 0
+                    yield frame
             finally:
                 if hb_task:
                     hb_task.cancel()
@@ -369,7 +397,15 @@ async def telemetry_frames(host: str, port: int = TCP_PORT) -> AsyncIterator[dic
                     await writer.wait_closed()
                 except Exception:
                     pass
-        except (OSError, asyncio.IncompleteReadError, ConnectionError):
+        except (OSError, asyncio.IncompleteReadError, asyncio.TimeoutError) as exc:
+            # A timeout means we gave up on a silent device; EOF means the device
+            # closed on us. Worth telling apart when the stream keeps dropping.
+            _LOGGER.info("stream from %s ended: %s", host, type(exc).__name__)
+            failures += 1
+            if on_disconnect is not None:
+                await on_disconnect()
+            if max_failures is not None and failures >= max_failures:
+                return
             await asyncio.sleep(backoff)
             backoff = min(backoff * 2, 30.0)
 

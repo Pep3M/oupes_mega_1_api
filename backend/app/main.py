@@ -54,6 +54,9 @@ HISTORY_DB = default_db_path() if _HISTORY_DB_ENV is None else _HISTORY_DB_ENV.s
 BATTERY_SAMPLE_S = float(os.environ.get("BATTERY_SAMPLE_S", "60"))
 BATTERY_RETENTION_DAYS = float(os.environ.get("BATTERY_RETENTION_DAYS", "30"))
 DISCOVERY_RETRY_S = float(os.environ.get("DISCOVERY_RETRY_S", "30"))
+# Consecutive failed attempts on an auto-detected address before searching the
+# LAN again. With the reconnect backoff that is roughly a minute of silence.
+REDISCOVER_AFTER_FAILURES = int(os.environ.get("REDISCOVER_AFTER_FAILURES", "6"))
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 
@@ -120,6 +123,14 @@ class State:
         }
         await self._fanout(event)
 
+    async def mark_disconnected(self) -> None:
+        """Stop presenting the last frame as live. Idempotent across retries."""
+        if not self.connected:
+            return
+        self.connected = False
+        _LOGGER.warning("lost the telemetry stream from %s; reconnecting", self.host)
+        await self._fanout({"type": "disconnected", "t": time.time()})
+
     async def _fanout(self, event: dict[str, Any]) -> None:
         dead: list[WebSocket] = []
         async with self._lock:
@@ -175,26 +186,38 @@ async def resolve_host() -> str:
 
 async def telemetry_loop() -> None:
     """Background task: stream frames forever, update state."""
-    host = await resolve_host()
-    state.host = host
+    while True:
+        host = await resolve_host()
+        state.host = host
 
-    # Unicast discovery enriches device_info; failure is non-fatal because the
-    # telemetry stream itself carries everything we actually render.
-    if state.device_info is None:
-        try:
-            results = await asyncio.get_running_loop().run_in_executor(
-                None, discover, host, 2.0
-            )
-            if results:
-                state.device_info = results[0].as_dict()
-        except Exception:
-            _LOGGER.debug("device info lookup failed", exc_info=True)
+        # Unicast discovery enriches device_info; failure is non-fatal because the
+        # telemetry stream itself carries everything we actually render.
+        if state.device_info is None:
+            try:
+                results = await asyncio.get_running_loop().run_in_executor(
+                    None, discover, host, 2.0
+                )
+                if results:
+                    state.device_info = results[0].as_dict()
+            except Exception:
+                _LOGGER.debug("device info lookup failed", exc_info=True)
 
-    async for frame in telemetry_frames(host):
-        if not state.connected:
-            state.connected = True
-            await state._fanout({"type": "connected", "t": time.time()})
-        await state.merge_and_broadcast(frame)
+        # A pinned MEGA_HOST is retried forever; an auto-detected one is given up
+        # on, because the device may have come back under another DHCP lease.
+        frames = telemetry_frames(
+            host,
+            on_disconnect=state.mark_disconnected,
+            max_failures=None if MEGA_HOST else REDISCOVER_AFTER_FAILURES,
+        )
+        async for frame in frames:
+            if not state.connected:
+                state.connected = True
+                _LOGGER.info("receiving telemetry from %s", host)
+                await state._fanout({"type": "connected", "t": time.time()})
+            await state.merge_and_broadcast(frame)
+
+        _LOGGER.warning("%s stopped answering; searching the LAN again", host)
+        state.device_info = None
 
 
 @asynccontextmanager

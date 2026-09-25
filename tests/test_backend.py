@@ -115,6 +115,20 @@ class TestFanout:
         assert len(sent) == 1
         assert len(state.subscribers) == 1
 
+    async def test_a_drop_clears_connected_and_tells_subscribers_once(self, state):
+        sent = []
+
+        class LiveWS:
+            async def send_json(self, event):
+                sent.append(event)
+
+        state.subscribers.add(LiveWS())
+        state.connected = True
+        await state.mark_disconnected()
+        await state.mark_disconnected()  # every retry reports, only one event
+        assert state.connected is False
+        assert [e["type"] for e in sent] == ["disconnected"]
+
 
 class TestEndpoints:
     """Exercised without the lifespan, so no device or discovery is involved."""
